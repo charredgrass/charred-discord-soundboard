@@ -1,6 +1,8 @@
 const Discord = require("discord.js");
 const fs = require("fs");
 
+const C = require("constants.js");
+
 const client = new Discord.Client();
 
 let config = JSON.parse(fs.readFileSync("./config.json").toString("utf-8"));
@@ -11,10 +13,14 @@ client.on("ready", () => {
 });
 
 let connection, dispatcher;
+let playState = C.MUSIC_STATES.NO_TRACK;
 
 client.on("message", (message) => {
     if (!message.guild) return;
     let text = message.content;
+    const send = (text) => {
+        message.channel.send(text).then();
+    };
     if (text === "join") {
         if (message.member.voiceChannel && !connection) {
             message.member.voiceChannel.join().then((c) => {
@@ -22,9 +28,9 @@ client.on("message", (message) => {
             }).catch(console.log);
         } else {
             if (connection) {
-                message.channel.send("Connection Occupied.").then();
+                send("Connection Occupied.");
             } else {
-                message.channel.send("Channel Not Found.").then();
+                send("Channel Not Found.");
             }
         }
     }
@@ -34,28 +40,55 @@ client.on("message", (message) => {
             connection = null;
             dispatcher = null;
         } else {
-            message.channel.send("Channel Not Found").then();
+            send("Channel Not Found");
         }
     }
     if (text.substring(0, "play ".length) === "play ") {
         let file = "./sounds/" + text.substring("play ".length);
         if (!connection) {
-            message.channel.send("No Current Connection, I need to be in a voice channel.").then();
+            send("No Current Connection, I need to be in a voice channel.");
             return;
         }
         if (fs.existsSync(file)) {
             if (dispatcher) {
-                message.channel.send("Something is playing already.").then();
+                send("Something is playing already.");
             } else {
                 dispatcher = connection.playFile(file);
+                playState = C.MUSIC_STATES.PLAYING;
                 dispatcher.on("end", () => {
                     dispatcher = null;
+                    playState = C.MUSIC_STATES.NO_TRACK;
                 });
             }
         } else {
-            message.channel.send("File Not Found.").then();
+            send("File Not Found.");
         }
-
+    }
+    if (text === "pause") {
+        switch (playState) {
+            case C.MUSIC_STATES.NO_TRACK:
+                send("Nothing is playing.");
+                break;
+            case C.MUSIC_STATES.PLAYING:
+                dispatcher.pause();
+                send("Paused.");
+                playState = C.MUSIC_STATES.PAUSED;
+                break;
+            case C.MUSIC_STATES.PAUSED:
+                dispatcher.resume();
+                send("Unpaused.");
+                playState = C.MUSIC_STATES.PLAYING;
+                break;
+        }
+    }
+    if (text === "stop") {
+        if (dispatcher) {
+            dispatcher = null;
+            playState = C.MUSIC_STATES.NO_TRACK;
+            send("Stopped.");
+        } else {
+            send("Nothing is playing.");
+        }
     }
 });
 
