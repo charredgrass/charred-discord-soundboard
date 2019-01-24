@@ -1,7 +1,7 @@
 const Discord = require("discord.js");
 const fs = require("fs");
 
-const C = require("constants.js");
+const C = require("./constants.js");
 
 const client = new Discord.Client();
 
@@ -15,9 +15,47 @@ client.on("ready", () => {
 let connection, dispatcher;
 let playState = C.MUSIC_STATES.NO_TRACK;
 
+//TODO permissions
+
+function getSpecificVChannel(guild, name) {
+    let allChannels = guild.channels.array();
+    let target;
+    for (let ch of allChannels) {
+        if (ch.type === "voice" && ch.name === name) {
+            target = ch;
+            break;
+        }
+    }
+    return target;
+}
+
+function getPeopleWithNames(guild, names) {
+    let allChannels = guild.channels.array();
+    let people = []; //all people in voice channels
+    for (let ch of allChannels) {
+        if (ch.type === "voice") {
+            for (let mem of ch.members.array()) {
+                people.push(mem);
+            }
+        }
+    }
+    let ret = [];
+    for (let p of people) {
+        for (let n of names) {
+            //O(n^2) baby
+            if (p.nickname === n || p.user.username === n) {
+                ret.push(p);
+                break;
+            }
+        }
+    }
+    return ret;
+}
+
 client.on("message", (message) => {
     if (!message.guild) return;
-    let text = message.content;
+    let text = message.content.toLowerCase();
+    let loc = message.channel;
     const send = (text) => {
         message.channel.send(text).then();
     };
@@ -40,7 +78,7 @@ client.on("message", (message) => {
             connection = null;
             dispatcher = null;
         } else {
-            send("Channel Not Found");
+            send("No connection found to leave.");
         }
     }
     if (text.substring(0, "play ".length) === "play ") {
@@ -83,11 +121,34 @@ client.on("message", (message) => {
     }
     if (text === "stop") {
         if (dispatcher) {
-            dispatcher = null;
-            playState = C.MUSIC_STATES.NO_TRACK;
+            dispatcher.end();
             send("Stopped.");
         } else {
             send("Nothing is playing.");
+        }
+    }
+    if (text.substring(0, "moveme ".length) === "moveme ") {
+        let destination = message.content.substring("moveme ".length);
+        let target = getSpecificVChannel(message.guild, destination);
+        if (target) {
+            message.member.setVoiceChannel(target.id).then().catch(console.log);
+        } else {
+            send("Channel not found.");
+            return;
+        }
+    }
+    if (text.substring(0, "moveus ".length) === "moveus ") {
+        let destination = message.content.match(/moveus ([a-zA-Z ]+) \([a-zA-Z, ]+\)/);
+        if (!destination) return;
+        destination = destination[1]; //get the RegExp match
+        let target = getSpecificVChannel(message.guild, destination);
+        let toJump = getPeopleWithNames(message.guild, ["Bairac", "Audiomage", "Stef"]);
+        if (!target) {
+            send("Channel not found.");
+            return;
+        }
+        for (let p of toJump) {
+            p.setVoiceChannel(target.id).then().catch(console.log);
         }
     }
 });
